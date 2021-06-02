@@ -1,6 +1,6 @@
 from flask import request, jsonify
 
-from model import app, User, db
+from model import app, User, db, Ingredient, Recipe
 
 
 @app.route('/user_registration', methods=['POST'])
@@ -34,14 +34,68 @@ def user_login():
     return jsonify({"token": "ovo je token"})
 
 
-@app.route('/recipe_create')
+@app.route('/recipe_create', methods=['POST'])
 def recipe_create():
-    return ""
+    data = request.get_json()
+    name = data['name']
+    text = data['text']
+
+    existing_recipe = Recipe.query.filter_by(name=name).first()
+    if existing_recipe:
+        return jsonify({"message": "Recipe with that name already exists"})
+
+    new_recipe = Recipe(
+                name=name,
+                text=text,
+                rating=0.0,
+                # user
+                )
+
+    db.session.add(new_recipe)
+    db.session.commit()
+    db.session.close()
+
+    ingredients = data['ingredients'].replace(',', '').split()
+
+    ingredients_db = Ingredient.query.with_entities(Ingredient.name).all()
+    ingredients_db_list = [r for (r,) in ingredients_db]
+
+    for ingredient in ingredients:
+        if ingredient not in ingredients_db_list:
+            new_ingredient = Ingredient(name=ingredient)
+            db.session.add(new_ingredient)
+            db.session.commit()
+            db.session.close()
+
+    ingredient_object = Ingredient.query.all()
+    for i in ingredient_object:
+        if i.name in ingredients:
+            i.recipe.append(new_recipe)
+
+    db.session.commit()
+    db.session.close()
+
+    return jsonify({"message": "New recipe created."})
 
 
-@app.route('/recipe_rate')
+@app.route('/recipe_rate', methods=['POST'])
 def recipe_rate():
-    return ""
+    data = request.get_json()
+    recipe_id = data['recipe_id']
+    rate = data['rate']
+
+    recipe = Recipe.query.filter_by(id=recipe_id).first()
+    if not recipe:
+        return jsonify({"message": "Recipe with that id doesn't exist."})
+    if recipe.rating == 0.0:
+        rating = rate
+    else:
+        rating = (recipe.rating+rate)/2
+    recipe.rating = rating
+    db.session.commit()
+    db.session.close()
+
+    return jsonify({"Recipe rating": rating})
 
 
 @app.route('/recipe_list_all')
