@@ -26,9 +26,10 @@ class Recipe(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50))
     text = db.Column(db.Text)
+    ingredients = db.Column(db.Text)
     rating = db.Column(db.Float)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
-    ingredient = db.relationship('Ingredient', secondary=recipe_ingredient, backref=db.backref('recipe'))
+    ingredient = db.relationship('Ingredient', secondary=recipe_ingredient, backref=db.backref('recipe', lazy='dynamic'))
 
 
 class Ingredient(db.Model):
