@@ -1,7 +1,6 @@
 from flask import request, jsonify
 from sqlalchemy.sql.functions import count
 from sqlalchemy import desc, asc
-
 from model import app, User, db, Ingredient, Recipe
 
 
@@ -123,14 +122,14 @@ def recipe_response(recipes_db):
 
 @app.route('/recipe_list_all')
 def recipe_list_all():
-    r = request.args.get('filter')
-    if not r:
+    request_query = request.args.get('filter')
+    if not request_query:
         recipes_db = Recipe.query.order_by(Recipe.id).all()
     else:
         recipes_db = (
             db.session.query(Recipe).select_from(Ingredient).join(Ingredient.recipe)
-                .group_by(Recipe.id)
-                .order_by(desc(count(Ingredient.id)) if r == 'max' else asc(count(Ingredient.id))).all()
+            .group_by(Recipe.id)
+            .order_by(desc(count(Ingredient.id)) if request_query == 'max' else asc(count(Ingredient.id))).all()
         )
 
     recipes = recipe_response(recipes_db)
@@ -142,7 +141,7 @@ def recipe_list_all():
 def recipe_list_own():
     # user
     user_id = 1
-    recipes_db = Recipe.query.filter_by(user_id=user_id)
+    recipes_db = Recipe.query.filter_by(user_id=user_id).all()
     recipes = recipe_response(recipes_db)
     return jsonify({"recipes": recipes}), 200
 
@@ -155,6 +154,40 @@ def ingredients_top():
     top_ingredients = [{i.name: i.recipe.count()} for i in ingredient_top_db]
 
     return jsonify({"Top 5 ingredients": top_ingredients}), 200
+
+
+@app.route('/recipe_search')
+def recipe_search():
+    request_query_name = request.args.get('name')
+    request_query_text = request.args.get('text')
+    request_query_ingredients = request.args.get('ingredients')
+
+    recipes_db = Recipe.query.order_by(Recipe.id).all()
+    recipes_list = []
+
+    if request_query_name:
+        search = request_query_name.replace(',', ' ').split()
+        for recipe in recipes_db:
+            recipe_name = recipe.name.replace(',', ' ').split()
+            if all(x.lower() in [r.lower() for r in recipe_name] for x in search):
+                recipes_list.append(recipe)
+    elif request_query_text:
+        search = request_query_text.replace(',', ' ').split()
+        for recipe in recipes_db:
+            recipe_text = recipe.text.replace(',', ' ').split()
+            if all(x.lower() in [r.lower() for r in recipe_text] for x in search):
+                recipes_list.append(recipe)
+    elif request_query_ingredients:
+        search = request_query_ingredients.replace(',', ' ').split()
+        for recipe in recipes_db:
+            recipe_ingredients = recipe.text.replace(',', ' ').split()
+            if all(x.lower() in [r.lower() for r in recipe_ingredients] for x in search):
+                recipes_list.append(recipe)
+    else:
+        return jsonify({"message": "Enter search parameter and value"}), 400
+
+    recipes = recipe_response(recipes_list)
+    return jsonify({"message": recipes}), 200
 
 
 if __name__ == '__main__':
