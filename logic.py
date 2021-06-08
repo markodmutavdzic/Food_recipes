@@ -1,6 +1,9 @@
 from flask import request, jsonify
 from sqlalchemy.sql.functions import count
 from sqlalchemy import desc, asc
+
+from clearbit_info import additional_data
+from hunter import email_verifier
 from model import app, User, db, Ingredient, Recipe
 
 
@@ -12,11 +15,20 @@ def user_registration():
     if user:
         return jsonify({"message": "User with that username already exists."}), 400
 
+    if not email_verifier(data['email']):
+        return jsonify({"message": "Invalid email"}), 400
+
+    user_data = additional_data(data['email'])
+
     new_user = User(first_name=data['first_name'],
                     last_name=data['last_name'],
                     email=data['email'],
                     username=data['username'],
-                    password=data['password']
+                    password=data['password'],
+                    user_location=user_data['user_location'],
+                    user_title=user_data['user_title'],
+                    company_name=user_data['company_name'],
+                    company_sector=user_data['company_sector'],
                     )
     db.session.add(new_user)
     db.session.commit()

@@ -13,6 +13,10 @@ class User(db.Model):
     email = db.Column(db.String(50))
     username = db.Column(db.String(50))
     password = db.Column(db.String(50))
+    user_location = db.Column(db.Text)
+    user_title = db.Column(db.String(50))
+    company_name = db.Column(db.String(50))
+    company_sector = db.Column(db.String(50))
     recipes = db.relationship('Recipe', backref='user')
 
 
