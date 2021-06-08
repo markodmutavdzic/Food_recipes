@@ -1,15 +1,19 @@
 from flask import request, jsonify
+from marshmallow import ValidationError
 from sqlalchemy.sql.functions import count
 from sqlalchemy import desc, asc
-
 from clearbit_info import additional_data
 from hunter import email_verifier
+from marsh import user_register_schema, recipe_create_schema, recipe_rate_schema
 from model import app, User, db, Ingredient, Recipe
 
 
 @app.route('/user_registration', methods=['POST'])
 def user_registration():
-    data = request.get_json()
+    try:
+        data = user_register_schema.load(request.get_json())
+    except ValidationError as err:
+        return err.messages, 400
 
     user = User.query.filter_by(username=data['username']).first()
     if user:
@@ -55,7 +59,12 @@ def user_login():
 
 @app.route('/recipe_create', methods=['POST'])
 def recipe_create():
-    data = request.get_json()
+
+    try:
+        data = recipe_create_schema.load(request.get_json())
+    except ValidationError as err:
+        return err.messages, 400
+
     name = data['name']
     text = data['text']
     ingredients = data['ingredients'].replace(',', ' ').split()
@@ -99,7 +108,12 @@ def recipe_create():
 
 @app.route('/recipe_rate', methods=['POST'])
 def recipe_rate():
-    data = request.get_json()
+
+    try:
+        data = recipe_rate_schema.load(request.get_json())
+    except ValidationError as err:
+        return err.messages, 400
+
     recipe_id = data['recipe_id']
     rate = data['rate']
 
@@ -110,11 +124,11 @@ def recipe_rate():
         rating = rate
     else:
         rating = (recipe.rating + rate) / 2
-    recipe.rating = rating
+    recipe.rating = round(rating, 2)
     db.session.commit()
     db.session.close()
 
-    return jsonify({"Recipe rating": rating}), 200
+    return jsonify({"message": "Recipe successfully rated"}), 200
 
 
 def recipe_response(recipes_db):
