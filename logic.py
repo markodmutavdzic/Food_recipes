@@ -1,3 +1,4 @@
+import datetime
 from flask import request, jsonify
 from marshmallow import ValidationError
 from sqlalchemy.sql.functions import count
@@ -6,6 +7,28 @@ from clearbit_info import additional_data
 from hunter import email_verifier
 from marsh import user_register_schema, recipe_create_schema, recipe_rate_schema
 from model import app, User, db, Ingredient, Recipe
+import jwt
+from functools import wraps
+
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'access-token' in request.headers:
+            token = request.headers['access-token']
+        if not token:
+            return jsonify({'message': 'Token is missing'}), 401
+
+        try:
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            current_user = User.query.filter_by(id=data['id']).first()
+        except:
+            return jsonify({'message': 'Token is invalid.'}), 401
+
+        return f(current_user, *args, **kwargs)
+
+    return decorated
 
 
 @app.route('/user_registration', methods=['POST'])
@@ -41,24 +64,31 @@ def user_registration():
     return jsonify({"message": "New user created."}), 200
 
 
-@app.route('/user_login', methods=['POST'])
+@app.route('/user_login')
 def user_login():
-    data = request.get_json()
-    username = data['username']
-    password = data['password']
+    auth = request.authorization
 
-    user = User.query.filter_by(username=username).first()
+    if not auth or not auth.username or not auth.password:
+        return jsonify({"message": "Username and password required."}), 401
+
+    user = User.query.filter_by(username=auth.username).first()
 
     if not user:
-        return jsonify({"message": "No such user."}), 400
-    if password != user.password:
-        return jsonify({"message": "Invalid password"}), 400
-    return jsonify({"token": "ovo je token"}), 200
-    # potrebno uraditi token
+        return jsonify({"message": "User with that username doesn't exist"}), 401
+
+    if user.password == auth.password:
+        token = jwt.encode(
+            {'id': user.id, 'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=30)},
+            app.config['SECRET_KEY'], algorithm='HS256')
+
+        return jsonify({'token': token}), 200
+
+    return jsonify({"message": "Invalid password"}), 401
 
 
 @app.route('/recipe_create', methods=['POST'])
-def recipe_create():
+@token_required
+def recipe_create(current_user):
 
     try:
         data = recipe_create_schema.load(request.get_json())
@@ -72,13 +102,13 @@ def recipe_create():
     existing_recipe = Recipe.query.filter_by(name=name).first()
     if existing_recipe:
         return jsonify({"message": "Recipe with that name already exists"}), 400
-    # dodati usera
+
     new_recipe = Recipe(
         name=name,
         text=text,
         rating=0.0,
         ingredients=ingredients,
-        # user
+        user_id=current_user.id
     )
 
     db.session.add(new_recipe)
@@ -107,7 +137,8 @@ def recipe_create():
 
 
 @app.route('/recipe_rate', methods=['POST'])
-def recipe_rate():
+@token_required
+def recipe_rate(current_user):
 
     try:
         data = recipe_rate_schema.load(request.get_json())
@@ -120,6 +151,8 @@ def recipe_rate():
     recipe = Recipe.query.filter_by(id=recipe_id).first()
     if not recipe:
         return jsonify({"message": "Recipe with that id doesn't exist."}), 400
+    if recipe.user_id == current_user.id:
+        return jsonify({"message": "It's not allowed to rate your own recipes"})
     if recipe.rating == 0.0:
         rating = rate
     else:
@@ -164,10 +197,10 @@ def recipe_list_all():
 
 
 @app.route('/recipe_list_own')
-def recipe_list_own():
-    # user
-    user_id = 1
-    recipes_db = Recipe.query.filter_by(user_id=user_id).all()
+@token_required
+def recipe_list_own(current_user):
+
+    recipes_db = Recipe.query.filter_by(user_id=current_user.id).all()
     recipes = recipe_response(recipes_db)
     return jsonify({"recipes": recipes}), 200
 

@@ -5,6 +5,7 @@ SQLAlchemy==1.4.17
 requests==2.25.1
 clearbit==0.1.7
 marshmallow==3.12.1
+PyJWT==2.1.0
 
 
 
